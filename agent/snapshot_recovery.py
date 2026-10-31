@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -154,21 +155,13 @@ class SnapshotRecovery(Server):
     ) -> str:
         dump_command = db_dump_cli()
 
-        command = [
-            dump_command,
-            "-h",
-            database_ip,
-            "-u",
-            "root",
-            f"-p{mariadb_root_password}",
-            database_name,
-            "|",
-            "gzip",
-            ">",
-            file_path,
-        ]
+        command = (
+            f"{dump_command} -h {shlex.quote(database_ip)} -u root {shlex.quote(database_name)}"
+            f" | gzip > {shlex.quote(file_path)}"
+        )
+        environment = {**os.environ, "MYSQL_PWD": mariadb_root_password}
 
-        subprocess.run(" ".join(command), shell=True, check=True)
+        subprocess.run(command, shell=True, check=True, env=environment)
 
     @step("Upload Backup Files to S3")
     def upload_backup_files_to_s3(self, backup_files, offsite) -> str:
