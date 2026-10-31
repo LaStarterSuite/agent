@@ -637,6 +637,7 @@ class ImageBuilder(Base, JobMixin):
             return self._build_and_push(context_tar_filepath)
         finally:
             self._cleanup_context(context_tar_filepath)
+            self._prune_build_cache()
 
     def _build_and_push(self, context_tar_filepath: str):
         self._build_image(context_tar_filepath=context_tar_filepath)
@@ -832,6 +833,19 @@ class ImageBuilder(Base, JobMixin):
             os.remove(context_tar_filepath)
 
         return {"cleanup": True}
+
+    @step("Prune Build Cache")
+    def _prune_build_cache(self):
+        """Prune the docker build cache older than a day to reclaim disk space.
+
+        The buildkit cache grows with every build and is never reclaimed, filling
+        the disk. Cache younger than 24h is kept so later builds stay fast, and
+        only the build cache is pruned - images, containers and volumes used by
+        benches are not touched. A failed prune must not fail a finished build,
+        so its errors are ignored.
+        """
+        with contextlib.suppress(Exception):
+            self.execute(["docker", "builder", "prune", "--force", "--filter", "until=24h"])
 
 
 class PatchImageBuilder(Base, JobMixin):

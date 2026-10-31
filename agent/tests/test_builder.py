@@ -243,3 +243,32 @@ class TestGetCachedApp(unittest.TestCase):
         with open(os.path.join(self.public, "frontend", "index.html")) as f:
             self.assertEqual(f.read(), "old")
         self.assertFalse(os.path.exists(os.path.join(self.bench, "apps", "builder", "hooks.py")))
+
+
+class TestBuildCachePrune(unittest.TestCase):
+    def get_builder(self):
+        return SimpleNamespace(
+            execute=MagicMock(),
+            data={},
+            step_record=MagicMock(),
+            job_record=MagicMock(),
+        )
+
+    def test_build_cache_older_than_a_day_is_pruned_after_the_build(self):
+        from agent.builder import ImageBuilder
+
+        builder = self.get_builder()
+
+        ImageBuilder._prune_build_cache(builder)
+
+        builder.execute.assert_called_once_with(
+            ["docker", "builder", "prune", "--force", "--filter", "until=24h"]
+        )
+
+    def test_a_failed_prune_does_not_fail_the_build(self):
+        from agent.builder import ImageBuilder
+
+        builder = self.get_builder()
+        builder.execute = MagicMock(side_effect=Exception("docker daemon unreachable"))
+
+        ImageBuilder._prune_build_cache(builder)
