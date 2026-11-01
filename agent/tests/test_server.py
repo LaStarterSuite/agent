@@ -97,3 +97,43 @@ class TestServerNginxAccess(unittest.TestCase):
         config = self.server.config
         self.assertEqual(config["ip_accept"], ["183.82.5.84/32"])
         self.assertEqual(config["proxy_ip"], "10.3.1.0/24")
+
+
+class TestDockerLogin(unittest.TestCase):
+    """A registry password on argv leaks to process lists and every step log."""
+
+    def setUp(self):
+        self.directory = tempfile.mkdtemp()
+
+        with open(os.path.join(self.directory, "config.json"), "w") as f:
+            json.dump(
+                {
+                    "name": "u326-mumbai.frappe.cloud",
+                    "benches_directory": os.path.join(self.directory, "benches"),
+                    "nginx_directory": os.path.join(self.directory, "nginx"),
+                },
+                f,
+            )
+
+        self.server = Server(self.directory)
+
+    def tearDown(self):
+        shutil.rmtree(self.directory)
+
+    def test_the_registry_password_is_piped_to_stdin_not_the_command(self):
+        registry = {
+            "url": "registry.frappe.cloud",
+            "username": "press",
+            "password": "registry-password",
+        }
+
+        with patch.object(Server, "execute", return_value={}) as execute:
+            self.server.docker_login(registry)
+
+        command = execute.call_args.args[0]
+        self.assertIsInstance(command, list)
+        self.assertNotIn("registry-password", command)
+        self.assertIn("--password-stdin", command)
+        self.assertIn("press", command)
+        self.assertIn("registry.frappe.cloud", command)
+        self.assertEqual(execute.call_args.kwargs["input"], "registry-password")
